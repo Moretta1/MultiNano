@@ -3,31 +3,34 @@ import argparse
 import csv
 import os
 from sklearn.metrics import roc_auc_score, average_precision_score
+from imblearn.over_sampling import RandomOverSampler
+from collections import Counter
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
 import pandas as pd
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-from torch.optim import Adam, lr_scheduler
+from torch.optim import Adam, lr_scheduler, AdamW
 from utils import *
-from models import TandemMod, BahdanauAttention
+from models import SignalTransformer_v2, SignalTransformer, NaiveNet, BahdanauAttention
 
 torch.cuda.empty_cache()
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device: ", device)
 
-RMs = ["m6A", "m1A", "m5C", "hm5C", "I", "m7G", "psi"]  # tasks for ELIGOS dataset
+RMs = ["m6A", "m1A", "m5C", "hm5C", "I", "m7G", "psi"]
 num_task = len(RMs)
 
-data_pth = '/data/home/grp-lizy/wangrulan/tandem/data/synthetic/'  # shuld be modified according to your data file pth
+# input feature dictionary, please change to your own data path
+data_pth = '/data/fast5_data/ELIGOS/TandemMod_features/features/'
 
 train_mod_dict = {
     "hm5C": data_pth + 'hm5C/hm5C.train.feature.tsv',
     "I": data_pth + 'I/I.train.feature.tsv',
     "m1A": data_pth + 'm1A/m1A.train.feature.tsv',
     "m5C": data_pth + 'm5C/m5C.train.feature.tsv',
-    "m6A": data_pth + 'm6A/m6A.finetune.feature.tsv',
+    "m6A": data_pth + 'm6A/m6A.train.feature.tsv',
     "m7G": data_pth + 'm7G/m7G.train.feature.tsv',
     "psi": data_pth + 'psi/psi.train.feature.tsv',
 }
@@ -57,7 +60,7 @@ train_unmod_dict = {
     "I": data_pth + 'G/G.train.feature.tsv',
     "m1A": data_pth + 'A/A.train.feature.tsv',
     "m5C": data_pth + 'C/C.train.feature.tsv',
-    "m6A": data_pth + 'A/A.finetune.feature.tsv',
+    "m6A": data_pth + 'A/A.train.feature.tsv',
     "m7G": data_pth + 'G/G.train.feature.tsv',
     "psi": data_pth + 'U/U.train.feature.tsv',
 }
@@ -83,37 +86,56 @@ valid_unmod_dict = {
 }
 
 
-class NN(TandemMod):
+class NN(SignalTransformer_v2):
     def __init__(self):
         """
         Initialize the NN class.
-        Inherits from the TandemMod class.
+        Inherits from the SignalTransformer_v2 class.
         """
         super(NN, self).__init__()
+
+
+# uncomment to different structure
+'''
+class NN(SignalTransformer):
+    def __init__(self):
+        """
+        Initialize the NN class.
+        Inherits from the SignalTransformer class.
+        """
+        super(NN, self).__init__()
+
+class NN(NaiveNet):
+    def __init__(self):
+        """
+        Initialize the NN class.
+        Inherits from the NaiveNet class.
+        """
+        super(NN, self).__init__()
+'''
 
 
 def save_best(model, state, is_best, OutputDir):
     if is_best:
         print('=> Saving a new best from epoch %d"' % state['epoch'])
         torch.save(model, OutputDir + '/epoch%d.pkl' % state['epoch'])
-
     else:
         print("=> Validation Performance did not improve")
 
 
-def construct_data(RMs, mode):
-    # construct data as the form of [sample_num, num_task]
+def construct_data(RMs, mode, len_train=3e2, len_test=2e2, len_val=2e2):
     x_seq = []
     label_each_type = []
     sub_type_len = []
 
     for i in range(len(RMs)):
         if mode == 'train':
-            x, y = load_data(data_mod=train_mod_dict[RMs[i]], data_unmod=train_unmod_dict[RMs[i]])
+            x, y = load_data(data_mod=train_mod_dict[RMs[i]], data_unmod=train_unmod_dict[RMs[i]],
+                             data_length=len_train)
         elif mode == 'test':
-            x, y = load_data(data_mod=test_mod_dict[RMs[i]], data_unmod=test_unmod_dict[RMs[i]])
+            x, y = load_data(data_mod=test_mod_dict[RMs[i]], data_unmod=test_unmod_dict[RMs[i]], data_length=len_test)
         else:
-            x, y = load_data(data_mod=test_mod_dict[RMs[i]], data_unmod=test_unmod_dict[RMs[i]])
+            x, y = load_data(data_mod=test_mod_dict[RMs[i]], data_unmod=test_unmod_dict[RMs[i]], data_length=len_val)
 
         x_seq = x_seq + x
         label_each_type.append(y)
@@ -122,27 +144,24 @@ def construct_data(RMs, mode):
 
     row_num = np.sum(sub_type_len)
     col_num = len(RMs)
-    labels = pd.DataFrame(np.zeros((row_num, col_num)), dtype=object)
-    labels.columns = RMs
+    labels = pd.DataFrame(np.zeros((row_num, col_num)), dtype=object, columns=RMs)
     y_list = []
+    index_start = 0
 
     for i in range(len(RMs)):
-        target = labels[RMs[i]]
-        if i == 0:
-            index_start = 0
         index_end = index_start + len(label_each_type[i])
-        # print('index_start to index_end : ' + str(index_start) + ', ' + str(index_end))
-        target[index_start:index_end] = label_each_type[i]
-        labels[RMs[i]] = target
-        y_list.append(target.tolist())
-        index_start = index_end
+        # print(f'index_start to index_end : {index_start}, {index_end}')
+        labels.iloc[index_start:index_end, i] = label_each_type[i]
+        # iloc for assign values
+        y_list.append(label_each_type[i])
+        index_start = index_end  # index updating
 
-    # print("load data finished")
+    print("load data finished")
     return x_seq, y_list, labels
 
 
 def valid(model, test_loader, loss_weight):
-    # Valid during hte training phase
+    # !!! Valid
     model.eval()
     test_loss = 0
     metrics_dict = {"acc": 0,
@@ -166,6 +185,7 @@ def valid(model, test_loader, loss_weight):
             signal = signal.view(batch_size, 1, features)
 
             y_pred = model(signal, kmer, mean, std, intense, dwell, base_quality)
+            # y_pred = model(signal)
             test_loss += naive_loss(y_pred, y_true, loss_weight)
 
             acc = 0
@@ -175,14 +195,12 @@ def valid(model, test_loader, loss_weight):
 
             for i in range(num_task):
                 label = y_true.cpu().numpy()[:, i]  # ith modification true label
-                y_score = y_pred[i].cpu().detach().numpy()  
+                y_score = y_pred[i].cpu().detach().numpy()
+                # y_score contains 2 elements，corresponding to the predict score of [type1,type2,...,type_{num_task}]
                 y_pred_single = np.array([0 if instance < 0.5 else 1 for instance in y_score])
                 correct += np.sum(y_pred_single == label)
-                
-                tp = 0
-                fp = 0
-                tn = 0
-                fn = 0
+
+                tp, fp, tn, fn = 0
 
                 for index in range(test_num):
                     if label[index] == 1:
@@ -195,20 +213,20 @@ def valid(model, test_loader, loss_weight):
                             tn = tn + 1
                         else:
                             fp = fp + 1
-                            
-                print("true label distribution within modification:")
-                print(Counter(label))
-                print('tp\tfp\ttn\tfn')
-                print('{}\t{}\t{}\t{}'.format(tp, fp, tn, fn))
+
+                # print("true label distribution within modification:")
+                # print(Counter(label))
+                # print('tp\tfp\ttn\tfn')
+                # print('{}\t{}\t{}\t{}'.format(tp, fp, tn, fn))
 
                 acc += float(tp + tn) / test_num
 
                 try:
-                    auc += roc_auc_score(label, y_pred_single)
+                    auc += roc_auc_score(label, y_pred_single)  # calculate AUC
                 except ValueError:
                     pass
                 try:
-                    ap += average_precision_score(label, y_pred_single)
+                    ap += average_precision_score(label, y_pred_single)  # calculate AP
                 except ValueError:
                     pass
 
@@ -241,13 +259,14 @@ def binary_cross_entropy(x, y, focal=False):
 
     # focal loss
     if focal:
-        loss = -at * (1 - pt) ** gamma * (torch.log(x) * y + torch.log(1 - x) * (1 - y))
+        loss = -at * (1 - pt) ** (gamma) * (torch.log(x) * y + torch.log(1 - x) * (1 - y))
     else:
         loss = -(torch.log(x) * y + torch.log(1 - x) * (1 - y))
     return loss
 
 
 def naive_loss(y_pred, y_true, loss_weight=None, ohem=True, focal=True):
+    # num_task: modification types
     num_task = y_true.shape[-1]
     num_examples = y_true.shape[0]  # y_true: array [sample_num num_task]
     k = 0.7
@@ -276,9 +295,9 @@ def adjust_learning_rate(optimizer, lr):
 
 
 def train(model, train_loader, test_loader, args, lossWeight):
-    optimizer = Adam(model.parameters(), lr=args.lr)
-    lr_decay = lr_scheduler.ExponentialLR(optimizer, gamma=float(args.lr)*0.25)
-    # lr_decay = lr_scheduler.CosineAnnealingLR(optimizer, T_max=5)
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.decay)
+    gamma = float(args.lr) * 0.25
+    lr_decay = lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
 
     save_dir = args.output
     loss_weight_ = lossWeight
@@ -327,8 +346,9 @@ def train(model, train_loader, test_loader, args, lossWeight):
             batch_size, features = signal.size()
             signal = signal.view(batch_size, 1, features)
 
-            # predict through the model
-            y_pred = model(signal, kmer, mean, std, intense, dwell, base_quality)
+            y_pred = model(signal, kmer, mean, std, intense, dwell,
+                           base_quality)  # for NaiveNet or SignalTransformer-v2
+            # y_pred = model(signal) # for SignalTransformer
 
             # get loss
             loss = naive_loss(y_pred, y, loss_weight)  # here y is a list instead of array
@@ -339,7 +359,7 @@ def train(model, train_loader, test_loader, args, lossWeight):
             loss.backward()
             optimizer.step()
 
-            training_loss += loss.data  # training_loss calculating
+            training_loss += loss.data.detach()  # training_loss calculating
 
             if i == 1:  # periodic check y_pred
                 print("Sanity Checking, at epoch%02d, iter%02d, y_pred is" % (epoch, i),
@@ -362,7 +382,7 @@ def train(model, train_loader, test_loader, args, lossWeight):
         val_loss, metrics_dict = valid(model, test_loader, loss_weight)
 
         logwriter.writerow(dict(epoch=epoch, loss=training_loss.cpu().numpy() / len(train_loader.dataset),
-                                val_loss=val_loss.detach().cpu().numpy(), val_acc=metrics_dict['acc'],
+                                val_loss=val_loss.cpu().numpy(), val_acc=metrics_dict['acc'],
                                 val_auc=metrics_dict["auc"],
                                 val_precision=metrics_dict['ap']))
 
@@ -372,7 +392,7 @@ def train(model, train_loader, test_loader, args, lossWeight):
                  time() - ti))
 
         is_best = bool(metrics_dict["acc"] > best_val_acc and metrics_dict["acc"] > 0.6)
-        # add an additional condiction to avoid the case that prediction result belongs to certain type
+        # this is an additional condiction to avoid the case that prediction result belongs to one certain type
 
         if is_best:  # update best validation acc and save model
             best_val_acc = metrics_dict["acc"]
@@ -435,8 +455,9 @@ if __name__ == "__main__":
 
     print("train process.")
 
-    x_train, y_train, y_train_df = construct_data(RMs, mode="train")
-    x_valid, y_valid, y_valid_df = construct_data(RMs, mode="valid")
+    x_train, y_train, y_train_df = construct_data(RMs, mode="train", len_train=6e3)
+    x_valid, y_valid, y_valid_df = construct_data(RMs, mode="valid", len_val=12e2)
+    # please modify data_length, this is just a demo
 
     train_dataset = RMdata(x_train, np.asarray(y_train_df, dtype=int))
     test_dataset = RMdata(x_valid, np.asarray(y_valid_df, dtype=int))
@@ -450,18 +471,17 @@ if __name__ == "__main__":
     # ---------------------------------->>
     if not os.path.exists(args.output):
         os.makedirs(args.output)
-        print("%s created" % args.output)
 
     train_loader = DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True)
     test_loader = DataLoader(dataset=test_dataset, batch_size=args.bs, shuffle=True)
     print("DataLoader loaded.")
 
-    model = TandemMod(num_task=len(RMs), num_classes=2, vocab_zie=5, embedding_size=4, seq_len=5).to(device)
+    # model = NaiveNet(num_task=len(RMs), num_classes=2, vocab_size=5, embedding_size=4, seq_len=5).to(device) # NaiveNet
+    # model = SignalTransformer(num_task=len(RMs)).to(device)   # SignalTransformer
+    model = SignalTransformer_v2(num_task=len(RMs), vocab_size=5, embedding_size=4, seq_len=5).to(device)  # MultiNano
     print(model)
-    loss_weight_ = cal_loss_weight(train_loader.dataset)  # dictionary
+
+    loss_weight_ = cal_loss_weight(train_loader.dataset)
 
     # => training!
     train(model, train_loader, test_loader, args, lossWeight=loss_weight_)
-
-
-
