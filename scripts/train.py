@@ -200,7 +200,10 @@ def valid(model, test_loader, loss_weight):
                 y_pred_single = np.array([0 if instance < 0.5 else 1 for instance in y_score])
                 correct += np.sum(y_pred_single == label)
 
-                tp, fp, tn, fn = 0
+                tp = 0
+                fp = 0
+                tn = 0
+                fn = 0
 
                 for index in range(test_num):
                     if label[index] == 1:
