@@ -7,7 +7,7 @@ MultiNano is a computational framework designed for the **multi-label prediction
 ## **Features**
 - **Multi-label prediction**: Predict multiple RNA modifications simultaneously.
 - **Comprehensive analysis**: Evaluate both binary and multi-label classification metrics.
-- **High performance**: Demonstrated superior results compared to baseline methods like TandemMod.
+- **High performance**: Demonstrated superior results compared to baseline methods (you may try the baseline methods in file models.py).
 - **Flexible dataset compatibility**: Supports synthetic and real RNA modification datasets.
 
 ---
@@ -94,6 +94,8 @@ Using prediction of real HEK293T dataset, m6A modification as an example here:
 python scripts/predict.py --type m6A --pretrained_model models/bs_512_lr_0.00001/epoch4.pkl --feature_file output/output.feature.tsv --predict_result output/predict_output.tsv --bs 512
 ```
 We have contained the usage of ELIGOS dataset with 7 modifications and IVET rice dataset with 3 modifications in the file 'train.py' and 'ivet-testing.py' respectively.
+
+We have attached the code of three baseline methods in file 'models.py', you may switch to the model that you are interested in by changing the class name in train/testing file.
 
 
 
