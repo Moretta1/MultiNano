@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from utils import *
 from collections import Counter
 from torch.autograd import Variable
-from models import TandemMod
+from models import NaiveNet, BahdanauAttention, SignalTransformer
 from sklearn.metrics import recall_score, precision_score, roc_auc_score, roc_curve, average_precision_score, \
     confusion_matrix, precision_recall_curve
 from calculate_metrics import *
@@ -20,11 +20,10 @@ torch.cuda.empty_cache()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device=", device)
 RMs = ["m6A", "m1A", "m5C", "hm5C", "I", "m7G", "psi"]
-# RMs = ["hm5C", "I", "m1A", "m5C", "m6A", "m7G", "psi"]
-# RMs = ["m6A", "m1A", "m5C"]
 num_task = len(RMs)
 
-data_root_pth = '/data/home/grp-lizy/wangrulan/tandem/data/synthetic/'
+# change to your own data path
+data_root_pth = '/data/home/grp-lizy/wangrulan/MultiNano/data/synthetic/'
 
 test_mod_dict = {
     "hm5C": data_root_pth + 'hm5C/hm5C.test.feature.tsv',
@@ -87,13 +86,33 @@ valid_unmod_dict = {
 }
 
 
-class NN(TandemMod):
+class NN(SignalTransformer_v2):
     def __init__(self):
         """
         Initialize the NN class.
         Inherits from the TandemMod class.
         """
         super(NN, self).__init__()
+
+
+# uncomment to different structure
+'''
+class NN(SignalTransformer):
+    def __init__(self):
+        """
+        Initialize the NN class.
+        Inherits from the SignalTransformer class.
+        """
+        super(NN, self).__init__()
+
+class NN(NaiveNet):
+    def __init__(self):
+        """
+        Initialize the NN class.
+        Inherits from the NaiveNet class.
+        """
+        super(NN, self).__init__()
+'''
 
 
 def construct_data(RMs, mode, len_train=3e2, len_test=2e2, len_val=2e2):
@@ -103,11 +122,12 @@ def construct_data(RMs, mode, len_train=3e2, len_test=2e2, len_val=2e2):
 
     for i in range(len(RMs)):
         if mode == 'train':
-            x, y = load_data(data_mod=train_mod_dict[RMs[i]], data_unmod=train_unmod_dict[RMs[i]])
+            x, y = load_data(data_mod=train_mod_dict[RMs[i]], data_unmod=train_unmod_dict[RMs[i]],
+                             data_length=len_train)
         elif mode == 'test':
-            x, y = load_data(data_mod=test_mod_dict[RMs[i]], data_unmod=test_unmod_dict[RMs[i]])
+            x, y = load_data(data_mod=test_mod_dict[RMs[i]], data_unmod=test_unmod_dict[RMs[i]], data_length=len_test)
         else:
-            x, y = load_data(data_mod=valid_mod_dict[RMs[i]], data_unmod=valid_unmod_dict[RMs[i]])
+            x, y = load_data(data_mod=valid_mod_dict[RMs[i]], data_unmod=valid_unmod_dict[RMs[i]], data_length=len_val)
 
         x_seq = x_seq + x
         label_each_type.append(y)
@@ -145,7 +165,7 @@ if __name__ == "__main__":
         os.makedirs(args.output)
         os.makedirs(args.output + str('Figs/'))
 
-    x_test, y_test, y_df = construct_data(RMs, mode="test")
+    x_test, y_test, y_df = construct_data(RMs, mode="test", len_test=3e5)
     test_dataset = RMdata(x_test, np.array(y_df, dtype=int))
 
     # ------------------->>>
@@ -154,7 +174,7 @@ if __name__ == "__main__":
 
     test_num = len(x_test)
     num_batches = test_num // test_loader.batch_size + 1
-    print('Test数据：', test_num)
+    print('Test data：', test_num)
 
     model = torch.load(args.pretrained)
     print('---------load_model: checkpoint.pkl----->>>>')
@@ -181,7 +201,7 @@ if __name__ == "__main__":
         batch_size, features = signal.size()
         signal = signal.view(batch_size, 1, features)
 
-        out = model(signal, kmer, mean, std, intense, dwell, base_quality)
+        out = model(signal)
         test_y = test_y.cuda()
         df_tmp = pd.DataFrame(np.zeros((len(out[0]), num_task)), columns=RMs, dtype=object)
         df_score_tmp = pd.DataFrame(np.zeros((len(out[0]), num_task)), columns=RMs, dtype=object)
@@ -249,5 +269,3 @@ if __name__ == "__main__":
         perform_df.loc[criteria] = metrics_avg[criteria]
     # save to csv
     perform_df.to_csv('%s/average_metrics_dict.csv' % args.output, index=True)
-
-
