@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from utils import *
 from collections import Counter
 from torch.autograd import Variable
-from models import NaiveNet, BahdanauAttention, SignalTransformer
+from models import NaiveNet, BahdanauAttention, SignalTransformer, SignalTransformer_v2
 from sklearn.metrics import recall_score, precision_score, roc_auc_score, roc_curve, average_precision_score, \
     confusion_matrix, precision_recall_curve
 from calculate_metrics import *
@@ -19,11 +19,10 @@ from calculate_metrics import *
 torch.cuda.empty_cache()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device=", device)
-RMs = ["m6A", "m1A", "m5C", "hm5C", "I", "m7G", "psi"]
+RMs = ["m6A", "m1A", "m5C","hm5C", "I" , "m7G", "psi"]
 num_task = len(RMs)
 
-# change to your own data path
-data_root_pth = '/data/home/grp-lizy/wangrulan/MultiNano/data/synthetic/'
+data_root_pth = '/data/fast5_data/ELIGOS/TandemMod_features/features/'
 
 test_mod_dict = {
     "hm5C": data_root_pth + 'hm5C/hm5C.test.feature.tsv',
@@ -95,26 +94,6 @@ class NN(SignalTransformer_v2):
         super(NN, self).__init__()
 
 
-# uncomment to different structure
-'''
-class NN(SignalTransformer):
-    def __init__(self):
-        """
-        Initialize the NN class.
-        Inherits from the SignalTransformer class.
-        """
-        super(NN, self).__init__()
-
-class NN(NaiveNet):
-    def __init__(self):
-        """
-        Initialize the NN class.
-        Inherits from the NaiveNet class.
-        """
-        super(NN, self).__init__()
-'''
-
-
 def construct_data(RMs, mode, len_train=3e2, len_test=2e2, len_val=2e2):
     x_seq = []
     label_each_type = []
@@ -155,7 +134,7 @@ def construct_data(RMs, mode, len_train=3e2, len_test=2e2, len_val=2e2):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='TandemMod independent testing mode, multiple types of RNA modification detection.')
+        description='MultiNano independent testing mode, multiple types of RNA modification detection.')
     parser.add_argument('--output', required=True, help='file save path, make sure end with a slash /.')
     parser.add_argument('--pretrained', required=True, help='pretrained model file')
     parser.add_argument('--bs', type=int, required=False, default=64, help='batch_size')
@@ -165,7 +144,7 @@ if __name__ == "__main__":
         os.makedirs(args.output)
         os.makedirs(args.output + str('Figs/'))
 
-    x_test, y_test, y_df = construct_data(RMs, mode="test", len_test=3e5)
+    x_test, y_test, y_df = construct_data(RMs, mode="test", len_test=3e3) # please change the len_test according to your data scale
     test_dataset = RMdata(x_test, np.array(y_df, dtype=int))
 
     # ------------------->>>
@@ -174,9 +153,10 @@ if __name__ == "__main__":
 
     test_num = len(x_test)
     num_batches = test_num // test_loader.batch_size + 1
-    print('Test data：', test_num)
+    print('Test数据：', test_num)
 
-    model = torch.load(args.pretrained)
+    # model = torch.load(args.pretrained, map_location=torch.device('cpu')) # for CPU loading
+    model = torch.load(args.pretrained) # for GPU
     print('---------load_model: checkpoint.pkl----->>>>')
 
     # ---------------------------------->>
@@ -200,9 +180,9 @@ if __name__ == "__main__":
         base_quality = Variable(base_quality.to(device)).to(torch.float32)
         batch_size, features = signal.size()
         signal = signal.view(batch_size, 1, features)
-
-        out = model(signal)
-        test_y = test_y.cuda()
+        out = model(signal, kmer, mean, std, intense, dwell, base_quality)
+        # out = model(signal) # for SignalTransformer_v1 structure
+        test_y = test_y.cuda()  # comment this line when you are using CPU
         df_tmp = pd.DataFrame(np.zeros((len(out[0]), num_task)), columns=RMs, dtype=object)
         df_score_tmp = pd.DataFrame(np.zeros((len(out[0]), num_task)), columns=RMs, dtype=object)
 
