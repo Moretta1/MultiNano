@@ -446,7 +446,7 @@ def cal_loss_weight(dataset, beta=0.9):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='TandemMod train_mode, multiple types of RNA modification detection.')
+    parser = argparse.ArgumentParser(description='MultiNano train_mode, multiple types of RNA modification detection.')
 
     parser.add_argument('--output', type=str, required=True, help='New model file to be saved.')
     parser.add_argument('--epoch', type=int, required=False, default=10, help='Training epoch')
