@@ -181,7 +181,7 @@ if __name__ == "__main__":
         batch_size, features = signal.size()
         signal = signal.view(batch_size, 1, features)
         out = model(signal, kmer, mean, std, intense, dwell, base_quality)
-        # out = model(signal) # for SignalTransformer_v1 structure
+        # out = model(signal) # for SignalTransformer class
         test_y = test_y.cuda()  # comment this line when you are using CPU
         df_tmp = pd.DataFrame(np.zeros((len(out[0]), num_task)), columns=RMs, dtype=object)
         df_score_tmp = pd.DataFrame(np.zeros((len(out[0]), num_task)), columns=RMs, dtype=object)
