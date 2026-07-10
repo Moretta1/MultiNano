@@ -1,14 +1,13 @@
 # **MultiNano**
-
-MultiNano is a computational framework designed for the **multi-label prediction of RNA modifications** from **nanopore direct RNA sequencing** data. It aims to simultaneously detect and interpret seven common RNA modifications: hm5C, I, m1A, m5C, m6A, m7G, and Ψ.
+MultiNano is a deep learning framework for **simultaneous prediction of seven RNA modifications** from **nanopore direct RNA sequencing (DRS)** data. It aims to simultaneously detect and interpret seven common RNA modifications: hm5C, I, m1A, m5C, m6A, m7G, and Ψ.
 
 ---
 
 ## **Features**
 - **Multi-label prediction**: Predict multiple RNA modifications simultaneously.
 - **Comprehensive analysis**: Evaluate both binary and multi-label classification metrics.
-- **High performance**: Demonstrated superior results compared to baseline methods (you may try the baseline methods in file models.py).
-- **Flexible dataset compatibility**: Supports synthetic and real RNA modification datasets.
+- **High performance**: Demonstrated competitive results compared to baseline methods (you may try the baseline methods in file models.py).
+- **Flexible dataset compatibility**: Supports both synthetic datasets for model development and native RNA datasets for independent evaluation, supports RNA002 data. 
 
 ---
 
@@ -27,11 +26,30 @@ or you can simply download the .zip file for further usage
 
 
 ---
+## Datasets
+
+MultiNano was developed and evaluated using several publicly available nanopore direct RNA sequencing datasets.
+
+| Dataset | Usage |
+
+|---------|------|
+
+| SRP166020 | Model training and internal validation |
+
+| GSE227087 | Independent read-level testing |
+
+| PRJEB40872 | Site-level evaluation |
+
+| GSE210563 | GLORI ground truth |
+
+| PRJEB81662 | Native rRNA evaluation |
+
+| PRJEB55684 | Native tRNA evaluation |
 
 ## **Usage**
 
 To predict RNA modifications:
-Pre-processing of the raw fast5 files: we use Guppy v6.1.5 for basecalling first, then Tombo for resquiggling process.
+Pre-processing of the raw fast5 files: we use Guppy v6.5.7 for basecalling first, then Tombo v1.5.1 for resquiggling process.
 
 **0.  check whether your fast5 file is multi-fast5 or single fast5:**
   ```bash
@@ -64,12 +82,12 @@ tombo preprocess annotate_raw_with_fastqs --fast5-basedir single-fast5/files --f
 
 then resquiggle with Tombo:
 ```
-tombo resquiggle --overwrite --basecall-group Basecall_1D_001 demo/guppy_single  demo/reference_transcripts.fasta --processes 40 --fit-global-scale --include-event-stdev
+tombo resquiggle --overwrite --basecall-group Basecall_1D_001 demo/fast5_dir  demo/reference_transcripts.fasta --processes 40 --fit-global-scale --include-event-stdev
 ```
   
 **3.	Extract signals from fast5 files:**
 
-We first need minimap2 to map basecalled sequences to **reference transcripts**: 
+We first use minimap2(v2.24-r1122) to map basecalled sequences to **reference transcripts**: 
 
 ```bash
 minimap2 -ax map-ont reference_transcripts.fasta guppy_output/all.guppy.fastq > guppy_output/output.sam
@@ -94,6 +112,8 @@ Using prediction of real HEK293T dataset, m6A modification as an example here:
 python scripts/predict.py --type m6A --pretrained_model models/bs_512_lr_0.00001/epoch4.pkl --feature_file output/output.feature.tsv --predict_result output/predict_output.tsv --bs 512
 ```
 We have contained the usage of ELIGOS dataset with 7 modifications and IVET rice dataset with 3 modifications in the file 'train.py' and 'ivet-testing.py' respectively.
+
+The pretrained models released in this repository were trained on the IVT synthetic dataset (SRP166020).
 
 We have attached the code of three baseline methods in file 'models.py', you may switch to the model that you are interested in by changing the class name in train/testing file.
 
