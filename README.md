@@ -15,37 +15,46 @@ MultiNano is a deep learning framework for **simultaneous prediction of seven RN
 
 To use MultiNano, follow these steps:
 
-1. Clone this repository:
+Clone this repository:
    ```bash
    git clone git@github.com:Moretta1/MultiNano.git
    cd MultiNano
-
+   ```
 or you can simply download the .zip file for further usage
 
-2. Install dependencies:
+---
+## **Software used in this study**
 
+The following software packages were used for data preprocessing, model training, benchmarking, and evaluation in this study.
+
+| Method | Method type | Version |
+|--------|-------------|---------|
+| MultiNano | Predictor | 1.0 |
+| SingleMod | Predictor | latest available release |
+| m6Anet | Predictor | 2.1.0 |
+| MINES | Predictor | latest available release |
+| DENA | Predictor | latest available release |
+| ORCA | Predictor | latest available release |
+| Nanom6A | Predictor | 2.0 |
+| Tombo | Annotation and resquiggling | 1.5.1 |
+| Nanopolish | Eventalign | 0.11.3 |
+| Guppy | Basecaller | 6.5.7 |
 
 ---
 ## Datasets
 
 MultiNano was developed and evaluated using several publicly available nanopore direct RNA sequencing datasets.
 
-| Dataset | Usage |
-
+| Accession ID | Usage |
 |---------|------|
-
 | SRP166020 | Model training and internal validation |
-
 | GSE227087 | Independent read-level testing |
-
 | PRJEB40872 | Site-level evaluation |
-
 | GSE210563 | GLORI ground truth |
-
 | PRJEB81662 | Native rRNA evaluation |
-
 | PRJEB55684 | Native tRNA evaluation |
 
+---
 ## **Usage**
 
 To predict RNA modifications:
@@ -112,6 +121,8 @@ Using prediction of real HEK293T dataset, m6A modification as an example here:
 python scripts/predict.py --type m6A --pretrained_model models/bs_512_lr_0.00001/epoch4.pkl --feature_file output/output.feature.tsv --predict_result output/predict_output.tsv --bs 512
 ```
 We have contained the usage of ELIGOS dataset with 7 modifications and IVET rice dataset with 3 modifications in the file 'train.py' and 'ivet-testing.py' respectively.
+
+You may also change the input arguement '--type all' to get the prediction score of all the 7 modification.
 
 The pretrained models released in this repository were trained on the IVT synthetic dataset (SRP166020).
 
