@@ -128,7 +128,20 @@ The pretrained models released in this repository were trained on the IVT synthe
 
 We have attached the code of three baseline methods in file 'models.py', you may switch to the model that you are interested in by changing the class name in train/testing file.
 
+### Training Notes
 
+The model was implemented in **PyTorch** and optimized using the **Adam** optimizer. 
+The training hyperparameters used in this study are summarized below.
+
+| Hyperparameter | Value |
+|----------------|-------|
+| Optimizer | Adam |
+| Initial learning rate | `1e-5` |
+| Batch size | `256` |
+| Learning rate decay | `0.0025` |
+| Loss weighting | Uncertainty weighting |
+| Hard example mining | Online Hard Example Mining (OHEM) |
+| Early stopping | Validation convergence |
 
 
 
