@@ -144,4 +144,109 @@ The training hyperparameters used in this study are summarized below.
 | Early stopping | Validation convergence |
 
 
+---
+
+## Expanded validation for RNA004 data:
+
+We incorporated our pipeline to RNA004 data, which is more updated than RNA002. Currently we tried on two modifications: m6A and m5C.
+
+The whole workflow is similar to previous part in RNA002. 
+
+### **Software used for RNA004 expanded validation**
+
+| Method | Method type | Version |
+|--------|-------------|---------|
+| Dorado | Basecaller | v0.6.2 |
+| f5c | Eventalign | v1.6 |
+
+---
+### **Dataset for RNA004 expanded validation**
+| Accession ID | Usage |
+|---------|------|
+| PRJEB82528 | RNA004 synthetic m6A/m5C training and testing |
+
+
+**1. Start with basecalling from pod5 raw file:**
+```bash
+dorado basecaller rna004_130bps_sup@v3.0.1 pod5_dir -x 'cuda:all' > basecall_output_dir/calls.bam
+dorado summary basecall_output_dir/calls.bam > basecall_output_dir/calls.summary
+samtools fastq basecall_output_dir/calls.bam  > basecall_output_dir/calls.fastq
+```
+
+pod5_dir: directory containing pod5 files
+basecall_output_dir: output path during basecalling
+
+**2. mapping:**
+
+```bash
+mv basecall_output_dir/calls.fastq basecall_output_dir/merge.fastq
+
+# mapping to transcript.fa
+minimap2 -ax map-ont -k 14 reference_transcripts.fa -t 25 --secondary=no basecall_output_dir/merge.fastq -o sample_name.sam 
+
+samtools view -@ 30 -F 2048 -F 4 -b sample_name.sam | samtools sort -O BAM -@ 20  -o sample_name.bam
+samtools index -@ 16 sample_name.bam
+
+# if your bam file is big, you may split it for parallelly later
+# spliting bam files for parallel processing
+mkdir split_bam_dir
+
+java -jar picard.jar SplitSamByNumberOfReads --INPUT sample_name.bam --SPLIT_TO_N_FILES 25 --OUTPUT split_bam_dir
+for bam in split_bam_dir/*bam
+do
+{
+samtools index $bam
+} &
+done
+```
+
+**3. eventalign**
+
+```bash
+mkdir eventalign_output_dir
+
+# making index
+pod5 convert to_fast5 pod5_dir/ --output fast5_dir/
+f5c index --iop 10 -t 10 -d fast5_dir basecall_output_dir/merge.fastq
+
+# eventalign
+f5c eventalign -r basecall_output_dir/merge.fastq -b $file -g reference_transcripts.fa -t 15 --rna --scale-events --samples --signal-index --summary eventalign_output_dir/eventalign_summary.txt --print-read-names > eventalign_output_dir/eventalign.txt
+# notice that this eventalign_summary.txt is a new output file, not the same file with calls.summary in step basecalling
+
+#if you need run parallelly for large file:
+for file in split_bam_dir/*.bam
+do
+{
+info=(${file//// })
+f5c eventalign -r basecall_output_dir/merge.fastq -b $file -g reference_transcripts.fa -t 15 --rna --scale-events --samples --signal-index --summary eventalign_output_dir/eventalign_${info[-1]%%.bam}_summary.txt --print-read-names > eventalign_output_dir/eventalign_${info[-1]%%.bam}_eventalign.txt
+} &
+done
+```
+
+**4. extracting signal from eventalign output and raw data**
+
+```bash
+python scripts/extract_signal_from_004_eventalign.py --eventalign eventalign_output_dir/eventalign.txt --reference reference_transcripts.fasta --sam sample_name.sam --fast5_dir fast5_dir/ --output output/output.signal.tsv
+
+# use the same sample_name.sam in step mapping
+```
+
+**5. extracting feature**
+
+```bash
+python scripts/extract_feature_from_004_signal.py --signal_file output/output.signal.tsv --clip 10 --motif DRACH --output output/output.feature.tsv
+```
+The --motif argument should take your own input, 'DRACH' is an example for m6A here.
+
+**6. training/testing/prediction**
+
+Then you can follow the same steps as in RNA002 dataset. We provide a pretrained model for simultaneously predicting m6A and m5C, you may try with is by using the cmd below:
+
+```bash
+python indep_test_004.py --pretrained models/RNA004_test.pkl --output results/
+```
+
+A small scale of RNA004 dataset is provided in the folder 'RNA004-data', corresponding signal/feature files and pretrained model are provided as well. You may try with our sample data on the pipeline.
+
+
 
