@@ -246,7 +246,7 @@ Then you can follow the same steps as in RNA002 dataset. We provide a pretrained
 python indep_test_004.py --pretrained models/RNA004_test.pkl --output results/
 ```
 
-A small scale of RNA004 dataset is provided in the folder 'RNA004-data', corresponding signal/feature files and pretrained model are provided as well. You may try with our sample data on the pipeline.
+A pretrained RNA004 model are provided as well. You may try with our sample data on the pipeline.
 
 
 
