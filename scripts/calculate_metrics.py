@@ -260,7 +260,7 @@ def cal_metrics(model_out, label, plot=False, class_names=None, plot_name=None, 
         lw = 2
         # roc curve
         fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(fig_width * 2 + 0.7, fig_height + 0.1))
-        fig.subplots_adjust(wspace=0.3, hspace=0.2)  # wspace: 子图之间的水平间距, hspace: 垂直间距
+        fig.subplots_adjust(wspace=0.3, hspace=0.2)  # wspace, hspace
         # PR curve
         fig_2, axes_2 = plt.subplots(nrows=1, ncols=2, figsize=(fig_width * 2 + 0.7, fig_height + 0.1))
         fig_2.subplots_adjust(wspace=0.3, hspace=0.2)
