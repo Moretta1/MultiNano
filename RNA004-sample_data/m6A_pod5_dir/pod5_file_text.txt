@@ -1,0 +1,1 @@
+we use RNA241003_Pool1.pod5.bc_31.pod5 in RNA004_CC_m6A.tar.gz from link: ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR139/ERR13956436/RNA004_CC_m6A.tar.gz 
